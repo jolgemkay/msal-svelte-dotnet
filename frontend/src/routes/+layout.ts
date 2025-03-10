@@ -1,18 +1,17 @@
-import { auth } from '$lib/auth';
+import { authenticate } from '$lib/auth';
 import { redirect } from '@sveltejs/kit';
 import type { LayoutLoad } from './$types';
 
-// Disable server side rendering, because we want a static web app
+// Disable server side rendering. This must run i frontend
 export const ssr = false;
+export const prerender = true;
 
 // Routes that allow anonymous access
 const excludedRoutes = ["/", "/error"]
 
 // Load function is run on every route and checks if user is authenticated
 export const load: LayoutLoad = async ({url}) => {
-    const user = await auth();
-
-    if (user === null && !excludedRoutes.includes(url.pathname))
+    if (!await authenticate() && !excludedRoutes.includes(url.pathname))
     {
         redirect(302, '/');
     }

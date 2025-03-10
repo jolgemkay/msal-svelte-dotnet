@@ -1,4 +1,5 @@
-import { PublicClientApplication, type AccountInfo } from "@azure/msal-browser";
+import { PublicClientApplication } from "@azure/msal-browser";
+import { SSO_ATTEMPT_FAILED } from "./storage";
 
 
 const CLIENT_ID = ""
@@ -21,7 +22,36 @@ const msalConfig = {
 };
 
 const msalInstance = new PublicClientApplication(msalConfig);
-await msalInstance.initialize();
+
+const init = async () => {
+    console.log("Initializing msalInstance")
+    await msalInstance.initialize();
+}
+
+const sso = async () => {
+    console.log("Checking SSO")
+    // prevent repeating sso fails in same session
+    if (sessionStorage.getItem(SSO_ATTEMPT_FAILED) === "true") return false;
+    try {
+        const response = await msalInstance.ssoSilent({});
+        return response?.account !== undefined;
+    } catch (err: any) {
+        if (err?.message.includes("AADSTS50058")) {
+            console.log("Interactive logon required")
+        } else {
+            console.log(err)
+        }
+        sessionStorage.setItem(SSO_ATTEMPT_FAILED, "true");
+        return false;
+    }
+}
+
+const redirect = async () => {
+    console.log("Checking redirect")
+    const response = await msalInstance.handleRedirectPromise();
+    return response?.account !== undefined;
+}
+
 
 export function login(){
     msalInstance.loginRedirect();
@@ -31,30 +61,37 @@ export function logout(){
     msalInstance.logoutRedirect();
 }
 
-export async function auth(): Promise<AccountInfo | null>{
-    try {
-        const response = await msalInstance.handleRedirectPromise();
-        if (response) {
-            return response.account
-
-        } else {
-            const currentAccounts = msalInstance.getAllAccounts();
-            if (currentAccounts.length === 1) {
-                return currentAccounts[0]
-            }
+export async function authenticate(): Promise<boolean>{
+    try 
+    {
+        if (currentUser() !== null || await redirect() || await sso()) 
+        {
+            return false;
         }
-        return null
-    } catch (error) {
-        console.log(error);
-        return null
+        sessionStorage.removeItem(SSO_ATTEMPT_FAILED);
+        return true;
+    } 
+    catch (error: any) 
+    {
+        if (error?.message.includes("uninitialized_public_client_application")) {
+            await init();
+            return await authenticate();
+        }
+        console.log(error)
+        return false
     }
 }
 
+
 export const currentUser = () => {
     try {
-        return msalInstance.getAllAccounts()[0];
-    } catch {
+        const currentAccounts = msalInstance.getAllAccounts();
+        if (currentAccounts.length > 0) {
+            return currentAccounts[0]
+        }
         return null;
+    } catch {
+        return null
     }
 }
 
@@ -76,4 +113,3 @@ export const aquireToken = async () => {
         return newToken.accessToken;
     } 
 }
-

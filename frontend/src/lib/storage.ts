@@ -1,0 +1,1 @@
+export const SSO_ATTEMPT_FAILED = "SSO_ATTEMPT_FAILED"
